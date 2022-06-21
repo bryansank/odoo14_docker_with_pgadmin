@@ -21,6 +21,8 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
     2:"Tj Credito",
   }
 
+  const properties = ["vat", "name", "address"];
+
   let flag = true;
 
   // ==================
@@ -204,16 +206,28 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
     async _printWeb_Alterate() {
       try {
 
-        this.dummy = "v0.0.0.4";
+        this.dummy = "v0.0.0.41";
         logInOdoo(prod, `${this.dummy}`,'background: #222; color: #bada55');
 
         this.errorDiscount = false;
 
         this.currentOrderJSON = this.env.pos.get_order().export_as_JSON();
         
-        // console.log(this.currentOrderJSON)
-        // debugger
-        const userSelected = this.env.pos.attributes.selectedClient;
+        
+        
+        // properties.forEach(pen=>{
+        //   const a = user[0].hasOwnProperty(pen) ? user[0].pen : null;
+        //   console.log(a)
+        // })
+
+        // const userobj = user[0] != null ? user.filter(e=> properties[e] == e) : null;
+        
+        // console.log(userobj)
+        // const ObjWithDataUser = userobj ? iteralo(userobj) : new Object();
+        // const datos = Object.keys(ObjWithDataUser).length != 0 ? ObjWithDataUser: null;
+        // console.log(datos)
+        // const userSelected = user ? validateUserClientData(user) : validateUserClientData();
+        
         
         this.employee_id_name = `${this.env.pos.employee.user_id[0]}|${this.env.pos.employee.name}`;
         this.objDate = dateFormat(this.currentOrderJSON);
@@ -244,6 +258,8 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
         this.payment_Structure.find(e=> e.substring(0,9) == "EFECTIVO2" ? this.flagEfectivo = true : this.flagEfectivo);
 
 
+
+
         // Aqui se arman los items.
         this.item_invoice = this._item_assemble_invoice(this.currentOrderJSON.lines);
         const yearMonthDay = `${this.objDate.year}${this.objDate.month}${this.objDate.day}`;
@@ -263,6 +279,8 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           });
         }
 
+        // Desgloce
+
         this.orderBroken = {
           // CLOSED: "TRUE", //TRUE? 
           EMPLOYEE: this.employee_id_name.toString(),
@@ -271,10 +289,10 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           HEADER: this.rest_name,
 
           // Aqui va el campo del cliente:
-          PIN: userSelected.vat.toString(),
-          NAME: userSelected.name.toString(),
-          ADDRESS: userSelected.address.toString(),
-          PHONE: userSelected.phone.toString(),
+          // PIN: userSelected.vat === "" ? ,
+          // NAME: userSelected.name.toString(),
+          // ADDRESS: userSelected.address.toString(),
+          // PHONE: userSelected.phone.toString(),
           // 
 
           // ORDERNAME: `Caja #${this.env.pos.pos_session.sequence_number}`,
@@ -290,6 +308,23 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           PAYMENT: this.payment_Structure.map( e=> e),
           CASH: cash != null ? cash : null,
         }
+        // END Desgloce
+
+        // Que necesito? Cliente? 
+        // iterar sobre el objeto, ver que tiene los campos, los que tenga agregarlos
+        // User Information.
+        debugger
+        const user = [this.env.pos.attributes.selectedClient];
+        // const ObjWithDataUser = user ? user : new Object();
+        if(user[0]){
+          const filterUserDetail = properties.filter(itera=> user[0].hasOwnProperty(properties[itera]) != null ? user[0][itera] : null);
+          const newUtilDataUser = assemble_userData(filterUserDetail, user);
+
+          this.orderBroken = {...this.orderBroken, ...newUtilDataUser}
+        }
+        debugger;
+        console.log(this.orderBroken)
+        
 
         let fileContent = this._assemble_final_invoice(this.orderBroken);
         fileContent = fileContent.replaceAll(',','');
@@ -338,6 +373,8 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
     }
   }
 
+
+
   async function getRateFromModelRPC(dateRate = '2022-05-26', efectvFlag, objRpc){
     if(!efectvFlag){
       return -1;
@@ -370,6 +407,45 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
     );
   }
 
+  function assemble_userData(hasProperty, userData){
+    const objUtilData = new Object();
+    hasProperty.map(it => {
+      switch (it.toString()) {
+        case "vat":
+          objUtilData['PIN'] = userData[0][it].toString();
+          break;
+        case "name":
+          objUtilData['NAME'] = userData[0][it].toString();
+          break;
+        case "address":
+          objUtilData['ADDRESS'] = userData[0][it].toString();
+          break;
+        default:
+          console.log('');
+          break;
+      }
+    });
+    return objUtilData;
+  }
+
+  function validateUserClientData(userData={}){
+    // PIN: userSelected.vat.toString(),
+    // NAME: userSelected.name.toString(),
+    // ADDRESS: userSelected.address.toString(),
+    // PHONE: userSelected.phone.toString(),
+    let aux = [];
+    let objuser = new Object();
+    const properties = ["vat", "name", "address", "phone"];
+    debugger
+    properties.forEach(e=>{
+
+      userData[e] == undefined ? aux.push(userData[e] = "") : aux.push(userData[e]);
+      
+      objuser[e] = userData[e];
+    });
+
+    return objuser;
+  }
 
   function totalItem(totalAmount=0, totalIvaAmount=0){
     if(!isNaN(Number(totalAmount)) || !isNaN(Number(totalIvaAmount))){
@@ -438,5 +514,5 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
 });
 // 
 // Verify version with DummyVersion variable. (this.dummy)
-// 0.0.0.4
+// 0.0.0.41
 //
