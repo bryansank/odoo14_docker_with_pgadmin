@@ -1,6 +1,7 @@
-
 odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
   "use strict";
+
+  const log = console.log;
 
   // ==================
   // ==================
@@ -11,15 +12,16 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
   // TODO: Cuantos decimales dejaremos colocalos.
   const decimals = 2;
   const prod = false;
+
   // TODO: Pasar esto a un archivo JSON o algo.
   // Aqui en Docker cambiar del tipo 2 en ordern al revez 432
   const TIPOS_DE_PAGO = {
-    4:"CASH",
-    // 1 y 4 
-    1:"EFECTIVO2",
-    3:"Tj Debito",
-    2:"Tj Credito",
-  }
+    4: "CASH",
+    // 1 y 4
+    1: "EFECTIVO2",
+    3: "Tj Debito",
+    2: "Tj Credito",
+  };
 
   const properties = ["vat", "name", "address"];
 
@@ -33,7 +35,6 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
   const Registries = require("point_of_sale.Registries");
 
   class AbstractReceiptScreen extends PosComponent {
-
     constructor() {
       super(...arguments);
       this.orderReceipt = useRef("order-receipt");
@@ -60,49 +61,48 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
       return;
     }
 
-    _item_assemble_invoice(itemsValue){
+    _item_assemble_invoice(itemsValue) {
+      const items = itemsValue.map((e) => {
+        let exempt = "*";
+        let namepro = e[2].full_product_name.toString();
+        let qty = e[2].qty;
+        let priceUnit = e[2].price_unit;
+        let amount_qty_total = (priceUnit * qty).toFixed(decimals).toString();
+        let discount = 0;
 
-        const items = itemsValue.map(e=>{
+        e[2].tax_ids[0][2][0] == 1 ? null : (exempt = "");
 
-          let exempt = "*";
-          let namepro = e[2].full_product_name.toString();
-          let qty = e[2].qty;
-          let priceUnit = e[2].price_unit;
-          let amount_qty_total = ((priceUnit * qty).toFixed(decimals)).toString();
-          let discount = 0;
+        // TODO: Ver si validar el 20 o el 60 aqui...
+        parseFloat(e[2].discount) == 0
+          ? null
+          : (discount = parseInt(e[2].discount));
 
-          e[2].tax_ids[0][2][0] == 1 ? null : exempt= "";
+        // discount != 0 ? amount_qty_total = (((amount_qty_total * discount) / 100) - amount_qty_total).toFixed(decimals) : null;
 
-          // TODO: Ver si validar el 20 o el 60 aqui...
-          parseFloat(e[2].discount) == 0 ? null : discount = parseInt(e[2].discount);
+        // Descuento en la ultima linea para leerla y crear linea COMP.
+        return `${exempt}${namepro}| ${amount_qty_total}|   ${amount_qty_total}| ${qty}| 0|${discount}`;
+      });
 
-
-          // discount != 0 ? amount_qty_total = (((amount_qty_total * discount) / 100) - amount_qty_total).toFixed(decimals) : null;
-
-          // Descuento en la ultima linea para leerla y crear linea COMP.
-          return `${exempt}${namepro}| ${amount_qty_total}|   ${amount_qty_total}| ${qty}| 0|${discount}`;
-        });
-
-        return items;
+      return items;
     }
 
-    _assemble_final_invoice(orden){
-
-      debugger;
+    _assemble_final_invoice(orden) {
   
       let textfile = "";
-  
-      for (let [key, value] of Object.entries(orden)) {
-  
-        if(key.length != 14 && key.length < 14){
-          key = key.padEnd(14, ' ');
+      let keyObj = "";
+
+      for (const [ky, val] of Object.entries(orden)){ 
+
+        if(ky.length != 14 && ky.length < 14){
+          keyObj = ky.padEnd(14, ' ');
         }
-  
-        if(key.trimEnd() == "ITEM" || key.trimEnd() == "PAYMENT"){
-          
+
+        // For break ITEM.
+        if(keyObj.trimEnd() == "ITEM" || keyObj.trimEnd() == "PAYMENT"){
+
           const items = [];
-          const items_ConDescuento = value.filter( item => isNaN(parseInt(item.substr(item.length - 2))) != true );
-          const items_SinDescuento = value.filter( item => isNaN(parseInt(item.substr(item.length - 2))) != false );
+          const items_ConDescuento = val.filter( item => isNaN(parseInt(item.substr(item.length - 2))) != true );
+          const items_SinDescuento = val.filter( item => isNaN(parseInt(item.substr(item.length - 2))) != false );
           // logInOdoo(prod,items_ConDescuento);
           // logInOdoo(prod,items_SinDescuento);
           
@@ -116,64 +116,66 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           
           textfile += items.map((e)=> 
             {//TODO: No se ha definido los complementos.
-              return this.calculate_discount_item(key, e);
+              return this.calculate_discount_item(keyObj, e);
             }
           );
 
+        }else if(keyObj.trimEnd() == "CASH" && val == null){
+          continue;
         }else{
-          
-          if(key.trimEnd() == "CASH" && value == null)
-            { break; }
-          else{
-            textfile += `${key}${value} \n`;
-          }
-          
+          textfile = `${textfile}${keyObj}${val}\n`;
         }
+
       }
-  
+
       return textfile;
-  
+        
     }
 
-    calculate_discount_item(key_value,str_item){
+    calculate_discount_item(key_value, str_item) {
       // Cantidad ya viene sumada al total
-      let item_quantity, discount, subtotal, zeroFlag, itemWithoutDiscountValue, item_total_amount, discountAmout, sub_ItemSubTotal;
+      let item_quantity,
+        discount,
+        subtotal,
+        zeroFlag,
+        itemWithoutDiscountValue,
+        item_total_amount,
+        discountAmout,
+        sub_ItemSubTotal;
 
       discount = parseInt(str_item.substr(str_item.length - 2)); //|0 o 20
-      isNaN(discount) ? discount = 0 : null;
-      discount == 0 ? zeroFlag =true:zeroFlag =false;
+      isNaN(discount) ? (discount = 0) : null;
+      discount == 0 ? (zeroFlag = true) : (zeroFlag = false);
       // item_quantity = str_item.split("/")[3];
-      itemWithoutDiscountValue = deleteDiscountOfLineItem(str_item,zeroFlag);
+      itemWithoutDiscountValue = deleteDiscountOfLineItem(str_item, zeroFlag);
       item_total_amount = str_item.split("|")[1];
-      
-      discountAmout = ((Number(item_total_amount).toFixed(decimals) * discount) / 100).toFixed(decimals);
-      
 
-      
+      discountAmout = (
+        (Number(item_total_amount).toFixed(decimals) * discount) /
+        100
+      ).toFixed(decimals);
+
       // TODO: AQUI DEBEN COLOCAR LOS DESCUENTOS....
-      if (discount > 0 && discount != 0 && discount == 60 || discount == 20){
-        return(
+      if ((discount > 0 && discount != 0 && discount == 60) || discount == 20) {
+        return (
           // Aqui armo el item, comp y el sub total.
           `${key_value}${itemWithoutDiscountValue} \n` +
-          "COMP          "+`Descuento ${discount}%|-${discountAmout}\n`
+          "COMP          " +
+          `Descuento ${discount}%|-${discountAmout}\n`
           // "SUBTOTAL      "+`${sub_ItemSubTotal} \n`
         );
-      } else if( discount != 0){
+      } else if (discount != 0) {
         this.errorDiscount = true;
-      }else{
+      } else {
         return `${key_value}${itemWithoutDiscountValue}\n`;
       }
-
     }
 
-    
-
     async _printReceipt() {
-
-      if(flag){
+      if (flag) {
         flag = false;
       }
-      
+
       if (this.env.pos.proxy.printer) {
         const printResult = await this.env.pos.proxy.printer.print_receipt(
           this.orderReceipt.el.outerHTML
@@ -193,11 +195,9 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
             await this._printWeb_Alterate();
 
             return true;
-            
           }
           return false;
         }
-
       } else {
         return await this._printWeb_Alterate();
       }
@@ -205,84 +205,93 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
 
     async _printWeb_Alterate() {
       try {
-
-        this.dummy = "v0.0.0.41";
-        logInOdoo(prod, `${this.dummy}`,'background: #222; color: #bada55');
+        this.dummy = "v0.0.0.48";
+        logInOdoo(prod, `${this.dummy}`, "background: #222; color: #bada55");
 
         this.errorDiscount = false;
 
         this.currentOrderJSON = this.env.pos.get_order().export_as_JSON();
-        
-        
-        
-        // properties.forEach(pen=>{
-        //   const a = user[0].hasOwnProperty(pen) ? user[0].pen : null;
-        //   console.log(a)
-        // })
 
-        // const userobj = user[0] != null ? user.filter(e=> properties[e] == e) : null;
-        
-        // console.log(userobj)
-        // const ObjWithDataUser = userobj ? iteralo(userobj) : new Object();
-        // const datos = Object.keys(ObjWithDataUser).length != 0 ? ObjWithDataUser: null;
-        // console.log(datos)
-        // const userSelected = user ? validateUserClientData(user) : validateUserClientData();
-        
-        
         this.employee_id_name = `${this.env.pos.employee.user_id[0]}|${this.env.pos.employee.name}`;
         this.objDate = dateFormat(this.currentOrderJSON);
 
         this.rest_name = this.env.pos.config.name;
 
         this.global_tax = this.currentOrderJSON.amount_tax.toFixed(decimals);
-        this.paymenst_types = getPaymentTypes(this.currentOrderJSON.statement_ids);
+        this.paymenst_types = getPaymentTypes(
+          this.currentOrderJSON.statement_ids
+        );
 
-
-        this.payment_Structure = this.paymenst_types.map(e=>{ 
-          return getNameTypePayment(e.idpay) == "CASH" ? 
-            `${getNameTypePayment(e.idpay)}|${e.amout}` : 
-            `${getNameTypePayment(e.idpay)}|${e.amout}|${this.global_tax}||MMYY`;
+        this.payment_Structure = this.paymenst_types.map((e) => {
+          return getNameTypePayment(e.idpay) == "CASH"
+            ? `${getNameTypePayment(e.idpay)}|${e.amout}`
+            : `${getNameTypePayment(e.idpay)}|${e.amout}|${
+                this.global_tax
+              }||MMYY`;
         });
 
-        this.subtotal_pay = this.currentOrderJSON.amount_total.toFixed(decimals) - this.currentOrderJSON.amount_tax.toFixed(decimals);
+        this.subtotal_pay =
+          this.currentOrderJSON.amount_total.toFixed(decimals) -
+          this.currentOrderJSON.amount_tax.toFixed(decimals);
 
-
-        this.only_cash_payMethod = this.payment_Structure.filter(e=> e.substring(0,4) == "CASH");
+        this.only_cash_payMethod = this.payment_Structure.filter(
+          (e) => e.substring(0, 4) == "CASH"
+        );
 
         let cash = null;
-        this.only_cash_payMethod.length != 0 ? cash = this.only_cash_payMethod[0].substring(5) : null;
+        this.only_cash_payMethod.length != 0
+          ? (cash = this.only_cash_payMethod[0].substring(5))
+          : null;
 
-        this.payment_Structure = this.payment_Structure.filter(e=> e.substring(0,4) != "CASH");
+        this.payment_Structure = this.payment_Structure.filter(
+          (e) => e.substring(0, 4) != "CASH"
+        );
 
         this.flagEfectivo = false;
-        this.payment_Structure.find(e=> e.substring(0,9) == "EFECTIVO2" ? this.flagEfectivo = true : this.flagEfectivo);
-
-
-
+        this.payment_Structure.find((e) =>
+          e.substring(0, 9) == "EFECTIVO2"
+            ? (this.flagEfectivo = true)
+            : this.flagEfectivo
+        );
 
         // Aqui se arman los items.
-        this.item_invoice = this._item_assemble_invoice(this.currentOrderJSON.lines);
+        this.item_invoice = this._item_assemble_invoice(
+          this.currentOrderJSON.lines
+        );
         const yearMonthDay = `${this.objDate.year}${this.objDate.month}${this.objDate.day}`;
         const yearMonthDayWithSeparators = `${this.objDate.year}-${this.objDate.month}-${this.objDate.day}`;
         this.rateAmount = 1;
 
-        await getRateFromModelRPC(yearMonthDayWithSeparators,this.flagEfectivo, this.env.services).then(
-          rateValueAmount => { 
+        await getRateFromModelRPC(
+          yearMonthDayWithSeparators,
+          this.flagEfectivo,
+          this.env.services
+        ).then(
+          (rateValueAmount) => {
             this.rateAmount = rateValueAmount;
-          }, err =>{ console.log(err); debugger }
+          },
+          (err) => {
+            console.log(err);
+            debugger;
+          }
         );
 
-        if(this.rateAmount == -1){
+        if (this.rateAmount == -1) {
           await this.showPopup("ConfirmPopup", {
-            title: this.env._t("Al parecer no hay una tasa configurada para el dia de hoy."),
-            body: this.env._t( "Por favor verifique la tasa y comuniquese con el equipo de soporte tecnico. \n"),
+            title: this.env._t(
+              "Al parecer no hay una tasa configurada para el dia de hoy."
+            ),
+            body: this.env._t(
+              "Por favor verifique la tasa y comuniquese con el equipo de soporte tecnico. \n"
+            ),
           });
         }
 
-        // Desgloce
-
+        ////////////////////////
+        //  ORDEN
+        ////////////////////////
         this.orderBroken = {
-          // CLOSED: "TRUE", //TRUE? 
+          // CLOSED: "TRUE", //TRUE?
           EMPLOYEE: this.employee_id_name.toString(),
           DOB: yearMonthDay,
           TIME: `${this.objDate.hour}:${this.objDate.minute}:${this.objDate.second}`,
@@ -293,7 +302,7 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           // NAME: userSelected.name.toString(),
           // ADDRESS: userSelected.address.toString(),
           // PHONE: userSelected.phone.toString(),
-          // 
+          //
 
           // ORDERNAME: `Caja #${this.env.pos.pos_session.sequence_number}`,
           // ${this.env.pos.cid}
@@ -304,36 +313,42 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           ITEM: this.item_invoice,
           SUBTOTAL: this.subtotal_pay.toFixed(decimals),
           TAX: this.global_tax,
-          TOTAL1ITEM: totalItem(this.subtotal_pay.toFixed(decimals), this.global_tax),
-          PAYMENT: this.payment_Structure.map( e=> e),
+          TOTAL1ITEM: totalItem(
+            this.subtotal_pay.toFixed(decimals),
+            this.global_tax
+          ),
+          PAYMENT: this.payment_Structure.map((e) => e),
           CASH: cash != null ? cash : null,
-        }
-        // END Desgloce
+        };
 
-        // Que necesito? Cliente? 
-        // iterar sobre el objeto, ver que tiene los campos, los que tenga agregarlos
-        // User Information.
-        debugger
         const user = [this.env.pos.attributes.selectedClient];
-        // const ObjWithDataUser = user ? user : new Object();
-        if(user[0]){
-          const filterUserDetail = properties.filter(itera=> user[0].hasOwnProperty(properties[itera]) != null ? user[0][itera] : null);
-          const newUtilDataUser = assemble_userData(filterUserDetail, user);
 
-          this.orderBroken = {...this.orderBroken, ...newUtilDataUser}
+        if (user[0]) {
+          const filterUserDetail = properties.filter((itera) =>
+            user[0].hasOwnProperty(properties[itera]) != null
+              ? user[0][itera]
+              : null
+          );
+
+          //TODO: here realese user data
+          // assemble_userData
+          for (const key of filterUserDetail) {
+            let keyval = [key];
+            keyval = keyval.toString().toUpperCase();
+            this.orderBroken = {...this.orderBroken, [keyval] : user[0][key]}
+          }
+
         }
-        debugger;
-        console.log(this.orderBroken)
-        
 
+        // No es enumerable... asi que en assemble se daña
         let fileContent = this._assemble_final_invoice(this.orderBroken);
-        fileContent = fileContent.replaceAll(',','');
 
+        fileContent = fileContent.replaceAll(",", "");
 
         // const filename = getRamdonNameCHK(this.objDate.second);
         const filename = `${this.currentOrderJSON.uid.toString()}.CHK`;
 
-        if(!this.errorDiscount){
+        if (!this.errorDiscount) {
           // const {confirmed} = await this.showPopup("ConfirmPopup", {
           //   title: this.env._t("Va a imprimir una factura."),
           //   body: this.env._t(
@@ -343,29 +358,30 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           // });
 
           // if(true){
-            // This is a magic
-            this._generate_chk_invoice(filename, fileContent);
-            return true;
+          // This is a magic
+          this._generate_chk_invoice(filename, fileContent);
+          return true;
           // }
-
-        }else{
+        } else {
           await this.showPopup("ConfirmPopup", {
             title: this.env._t("ATENCION -- DESCUENTO NO AUTORIZADO"),
             body: this.env._t(
-            "Usted esta intentando ingresar un articulo con un DESCUENTO, NO AUTORIZADO.                    \n" +
-            "Verifique nuevamente el pedido y no procese esta factura."
+              "Usted esta intentando ingresar un articulo con un DESCUENTO, NO AUTORIZADO.                    \n" +
+                "Verifique nuevamente el pedido y no procese esta factura."
             ),
           });
-          
+
           return false;
         }
-        
+
         // try closed
       } catch (err) {
         await this.showPopup("ErrorPopup", {
           title: this.env._t("Hubo un error inesperado."),
           body: this.env._t(
-            `Contactarse con el equipo de soporte, enviar el siguiente error:::: ==> ` + "  " + `${err.message}`
+            `Contactarse con el equipo de soporte, enviar el siguiente error:::: ==> ` +
+              "  " +
+              `${err.message}`
           ),
         });
         return false;
@@ -373,138 +389,136 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
     }
   }
 
-
-
-  async function getRateFromModelRPC(dateRate = '2022-05-26', efectvFlag, objRpc){
-    if(!efectvFlag){
+  async function getRateFromModelRPC(
+    dateRate = "2022-05-26",
+    efectvFlag,
+    objRpc
+  ) {
+    if (!efectvFlag) {
       return -1;
     }
 
     let latestRate = -1;
-  
-    if (!objRpc || !objRpc.rpc) 
-      return -1;
-    
+
+    if (!objRpc || !objRpc.rpc) return -1;
+
     let rate;
-    return await objRpc.rpc({model:'res.currency.rate', method:'search_read',args:[[['name','=', dateRate ]],['id','name','currency_id','rate']]}).then( 
-      dataRateObj => {
-        
-      rate = dataRateObj;
+    return await objRpc
+      .rpc({
+        model: "res.currency.rate",
+        method: "search_read",
+        args: [
+          [["name", "=", dateRate]],
+          ["id", "name", "currency_id", "rate"],
+        ],
+      })
+      .then((dataRateObj) => {
+        rate = dataRateObj;
 
-      if(rate && rate.length != 0){
-        rate = rate.filter(d=> d.currency_id[1] == "USD")
-        if (rate.length > 0){
+        if (rate && rate.length != 0) {
+          rate = rate.filter((d) => d.currency_id[1] == "USD");
+          if (rate.length > 0) {
             latestRate = rate[0].rate;
+          }
         }
-      }
 
-      // console.log(latestRate);
-      return latestRate.toFixed(4);
-      
-
-    }).catch(error => 
-      { debugger; logInOdoo(prod,error); return rate = -1}
-    );
+        // console.log(latestRate);
+        return latestRate.toFixed(4);
+      })
+      .catch((error) => {
+        debugger;
+        logInOdoo(prod, error);
+        return (rate = -1);
+      });
   }
 
-  function assemble_userData(hasProperty, userData){
-    const objUtilData = new Object();
-    hasProperty.map(it => {
-      switch (it.toString()) {
+  function assemble_userData(hasProperty, userData) {
+    const arr = hasProperty.map((it) => {
+      switch (it) {
         case "vat":
-          objUtilData['PIN'] = userData[0][it].toString();
-          break;
+          return { PIN: userData[0][it] };
         case "name":
-          objUtilData['NAME'] = userData[0][it].toString();
-          break;
+          return { NAME: userData[0][it] };
         case "address":
-          objUtilData['ADDRESS'] = userData[0][it].toString();
-          break;
+          return { ADDRESS: userData[0][it] };
+
         default:
-          console.log('');
-          break;
+          return { ERROR: "ERROR" };
       }
     });
+
+    let objUtilData = {};
+
+    arr.map((val, i) => {
+      objUtilData = Object.assign(objUtilData, val);
+    });
+
     return objUtilData;
   }
 
-  function validateUserClientData(userData={}){
-    // PIN: userSelected.vat.toString(),
-    // NAME: userSelected.name.toString(),
-    // ADDRESS: userSelected.address.toString(),
-    // PHONE: userSelected.phone.toString(),
-    let aux = [];
-    let objuser = new Object();
-    const properties = ["vat", "name", "address", "phone"];
-    debugger
-    properties.forEach(e=>{
 
-      userData[e] == undefined ? aux.push(userData[e] = "") : aux.push(userData[e]);
-      
-      objuser[e] = userData[e];
-    });
-
-    return objuser;
-  }
-
-  function totalItem(totalAmount=0, totalIvaAmount=0){
-    if(!isNaN(Number(totalAmount)) || !isNaN(Number(totalIvaAmount))){
-      const total = parseFloat(Number(totalAmount)+ Number(totalIvaAmount));
+  function totalItem(totalAmount = 0, totalIvaAmount = 0) {
+    if (!isNaN(Number(totalAmount)) || !isNaN(Number(totalIvaAmount))) {
+      const total = parseFloat(Number(totalAmount) + Number(totalIvaAmount));
       return total.toFixed(decimals);
     }
     return 0;
   }
 
-  function deleteDiscountOfLineItem(str_item,zeroFlag){
-    return zeroFlag ? str_item.slice(0,-2) : str_item.slice(0,-3);
+  function deleteDiscountOfLineItem(str_item, zeroFlag) {
+    return zeroFlag ? str_item.slice(0, -2) : str_item.slice(0, -3);
   }
 
-  // function getNameCHK(objOrder){
-  //   // param:dateObj
-  //   // return `${Math.floor(Math.random() * 2000)}${(dateObj).toString()}.CHK`;
-  // }
-
-  function getNameTypePayment(data){
-    if(TIPOS_DE_PAGO.hasOwnProperty(data)){
+  function getNameTypePayment(data) {
+    if (TIPOS_DE_PAGO.hasOwnProperty(data)) {
       return TIPOS_DE_PAGO[data];
     }
   }
 
-  function getPaymentTypes(data){
-    let payArray = data.map( i => {
+  function getPaymentTypes(data) {
+    let payArray = data.map((i) => {
       const objPay = {
-        amout : i[2].amount.toFixed(decimals),
-        idpay : i[2].payment_method_id
-      }
-      return objPay
+        amout: i[2].amount.toFixed(decimals),
+        idpay: i[2].payment_method_id,
+      };
+      return objPay;
     });
-    
+
     return payArray;
     // `${this.currentOrderJSON.statement_ids[0][2].payment_method_id}|${this.currentOrderJSON.amount_total.toFixed(2)}|${this.currentOrderJSON.amount_tax.toFixed(2)}||MMYY`
   }
 
-  // function validateDollarsPaymentMethod(dataPaymentMethods){
-  //   return dataPaymentMethods.find(e=>)
-  // }
-
-  function dateFormat(data){
-
+  function dateFormat(data) {
     const year = data.creation_date.getFullYear().toString();
 
-    const day = (data.creation_date.getDate().toString().length == 1 ? "0"+(data.creation_date.getDate()).toString() : (data.creation_date.getDate()).toString());
-    const month = (data.creation_date.getMonth().toString().length == 1 ? "0"+(data.creation_date.getMonth()+1).toString() : (data.creation_date.getMonth()+1).toString());
+    const day =
+      data.creation_date.getDate().toString().length == 1
+        ? "0" + data.creation_date.getDate().toString()
+        : data.creation_date.getDate().toString();
+    const month =
+      data.creation_date.getMonth().toString().length == 1
+        ? "0" + (data.creation_date.getMonth() + 1).toString()
+        : (data.creation_date.getMonth() + 1).toString();
 
-    
-    const second = (data.creation_date.getSeconds().toString().length == 1 ? "0"+(data.creation_date.getSeconds()+1).toString() : (data.creation_date.getSeconds()+1).toString());
+    const second =
+      data.creation_date.getSeconds().toString().length == 1
+        ? "0" + (data.creation_date.getSeconds() + 1).toString()
+        : (data.creation_date.getSeconds() + 1).toString();
 
-    const minute = (data.creation_date.getMinutes().toString().length == 1 ? "0"+(data.creation_date.getMinutes()).toString() : (data.creation_date.getMinutes()).toString());
-    const hour = (data.creation_date.getHours().toString().length == 1 ? "0"+(data.creation_date.getHours()).toString() : (data.creation_date.getHours()).toString());
+    const minute =
+      data.creation_date.getMinutes().toString().length == 1
+        ? "0" + data.creation_date.getMinutes().toString()
+        : data.creation_date.getMinutes().toString();
+    const hour =
+      data.creation_date.getHours().toString().length == 1
+        ? "0" + data.creation_date.getHours().toString()
+        : data.creation_date.getHours().toString();
 
-    return {month,day,year, hour,minute,second};
+    return { month, day, year, hour, minute, second };
   }
 
-  function logInOdoo(prod, message, style = 'color: #42f5d4;'){
-    prod ? null : console.info("%c"+message, style);
+  function logInOdoo(prod, message, style = "color: #42f5d4;") {
+    prod ? null : console.info("%c" + message, style);
   }
 
   // Propio del constructor de la clase del archivo.
@@ -512,7 +526,7 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
 
   return AbstractReceiptScreen;
 });
-// 
+//
 // Verify version with DummyVersion variable. (this.dummy)
-// 0.0.0.41
+// 0.0.0.48
 //
