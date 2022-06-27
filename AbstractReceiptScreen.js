@@ -295,8 +295,30 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
           EMPLOYEE: this.employee_id_name.toString(),
           DOB: yearMonthDay,
           TIME: `${this.objDate.hour}:${this.objDate.minute}:${this.objDate.second}`,
-          HEADER: this.rest_name,
+          HEADER: this.rest_name
+        };
 
+        const user = [this.env.pos.attributes.selectedClient];
+
+        if (user[0]) {
+          const filterUserDetail = properties.filter((itera) =>
+            user[0].hasOwnProperty(properties[itera]) != null
+              ? user[0][itera]
+              : null
+          );
+
+          //TODO: here realese user data
+          // assemble_userData
+          for (const key of filterUserDetail) {
+            let keyval = [key];
+            keyval = keyval.toString().toUpperCase();
+            this.orderBroken = {...this.orderBroken, [keyval] : user[0][key]}
+          }
+
+        }
+
+        this.orderBroken = {
+          ...this.orderBroken, 
           // Aqui va el campo del cliente:
           // PIN: userSelected.vat === "" ? ,
           // NAME: userSelected.name.toString(),
@@ -318,26 +340,7 @@ odoo.define("point_of_sale.AbstractReceiptScreen", function (require) {
             this.global_tax
           ),
           PAYMENT: this.payment_Structure.map((e) => e),
-          CASH: cash != null ? cash : null,
-        };
-
-        const user = [this.env.pos.attributes.selectedClient];
-
-        if (user[0]) {
-          const filterUserDetail = properties.filter((itera) =>
-            user[0].hasOwnProperty(properties[itera]) != null
-              ? user[0][itera]
-              : null
-          );
-
-          //TODO: here realese user data
-          // assemble_userData
-          for (const key of filterUserDetail) {
-            let keyval = [key];
-            keyval = keyval.toString().toUpperCase();
-            this.orderBroken = {...this.orderBroken, [keyval] : user[0][key]}
-          }
-
+          CASH: cash != null ? cash : null
         }
 
         // No es enumerable... asi que en assemble se daña
