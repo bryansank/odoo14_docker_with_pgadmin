@@ -30,7 +30,7 @@ You must be careful with the volumes of odoo.conf since all the necessary config
 
 - volumes:
 - Pd: .conf add other path for include other addons but, not addons core of odoo, only third party.
-*   /config/odoo.conf:/etc/odoo/odoo.conf
+*   /etc/odoo/  -> odoo.conf
 *   /addons:/mnt/extra-addons
 *   /usr/lib/python3/dist-packages/odoo#
 
