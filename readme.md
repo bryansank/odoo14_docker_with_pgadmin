@@ -1,13 +1,19 @@
 # Odoo 14 with Pos module modified, Dockerizado.
 
-### ☢ Note: Ignore or delete config folder in tree project.
-### ☢ Note 2: if you want open container with root access, use this ( flag-> -u 0 ):
-### ☢ Note 3: The file AbstractReceiptScreen place it in the path ->
-### /usr/lib/python3/dist-packages/odoo/addons/point_of_sale/static/src/js/Misc/:
+- Notes:
+  * ☢ Note: Ignore or delete config folder in tree project.
+  * ☢ Note 2: if you want open container with root access, use this ( flag-> -u 0 ):
+  * ☢ Note 3: The file AbstractReceiptScreen place it in the path ->
+    * /usr/lib/python3/dist-packages/odoo/addons/point_of_sale/static/src/js/Misc/:
+
+<hr />
+
+# This is a command for open odoo container root path.
 
 ```bash
-$  docker container exec -u 0 -it CONTAINER_ID bash
+$  docker container exec -u 0 -it "CONTAINER_ID_ODOO" bash
 ```
+
 
 We will use docker compose. 
 - web           -> image: odoo:14             Puerto-> "8069:8069"
@@ -22,9 +28,10 @@ Project with odoo using docker and pos module for extend this view with IGTF fea
 
 You must be careful with the volumes of odoo.conf since all the necessary configuration in this case of the odoo container is stored there.
 
-- \# volumes:
-- \#   - ./config/odoo.conf:/etc/odoo/odoo.conf
-- \#   - ./addons:/mnt/extra-addons
+- volumes:
+*   ./config/odoo.conf:/etc/odoo/odoo.conf
+*   ./addons:/mnt/extra-addons
+*   /usr/lib/python3/dist-packages/odoo#
 
 ## Install - Execute 📋
 
