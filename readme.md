@@ -4,7 +4,7 @@
   * ☢ Note: Ignore or delete config folder in tree project.
   * ☢ Note 2: if you want open container with root access, use this ( flag-> -u 0 ):
   * ☢ Note 3: The file AbstractReceiptScreen place it in the path ->
-    * /usr/lib/python3/dist-packages/odoo/addons/point_of_sale/static/src/js/Misc/:
+  * /usr/lib/python3/dist-packages/odoo/addons/point_of_sale/static/src/js/Misc/:
 
 <hr />
 
@@ -29,8 +29,9 @@ Project with odoo using docker and pos module for extend this view with IGTF fea
 You must be careful with the volumes of odoo.conf since all the necessary configuration in this case of the odoo container is stored there.
 
 - volumes:
-*   ./config/odoo.conf:/etc/odoo/odoo.conf
-*   ./addons:/mnt/extra-addons
+- Pd: .conf add other path for include other addons but, not addons core of odoo, only third party.
+*   /config/odoo.conf:/etc/odoo/odoo.conf
+*   /addons:/mnt/extra-addons
 *   /usr/lib/python3/dist-packages/odoo#
 
 ## Install - Execute 📋
