@@ -4,7 +4,9 @@
   * ☢ Note: Ignore or delete config folder in tree project.
   * ☢ Note 2: if you want open container with root access, use this ( flag-> -u 0 ):
   * ☢ Note 3: The file AbstractReceiptScreen place it in the path ->
-  * /usr/lib/python3/dist-packages/odoo/addons/point_of_sale/static/src/js/Misc/:
+  /usr/lib/python3/dist-packages/odoo/addons/point_of_sale/static/src/js/Misc/:
+  * ☢ Note 4: If SUDO NOT FOUND --> apt install sudo 
+  * ☢ Note 5: sudo odoo scaffold temperatura /mnt/extra-addons (PD: Instalar Odoo Module)
 
 <hr />
 
